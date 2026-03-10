@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TankServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9f4bcccb561ae6634eed9aa3230735c223aa10ce")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4bfbdc7d23709b63f9119781dea331479241194c")]
 [assembly: System.Reflection.AssemblyProductAttribute("TankServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TankServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

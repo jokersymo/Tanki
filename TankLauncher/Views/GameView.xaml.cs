@@ -129,11 +129,6 @@ namespace TankiLauncher.Views
             connection = new HubConnectionBuilder()
                 .WithUrl("http://localhost:5000/game")
                 .WithAutomaticReconnect()
-                .AddJsonProtocol(options =>
-                {
-                    options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
-                    options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-                })
                 .Build();
 
             connection.On<Dictionary<string, PlayerState>>("PlayersUpdate", players =>

@@ -1,13 +1,14 @@
 {
   "Joker": {
     "Username": "Joker",
+    "PlayerColorHex": "#3B82F6",
     "Level": 1,
-    "Experience": 0,
+    "Experience": 50,
     "NextLevelExp": 1000,
     "Silver": 500,
-    "Gold": 10,
-    "Iron": 50,
-    "Copper": 40,
+    "Gold": 11,
+    "Iron": 51,
+    "Copper": 43,
     "Titanium": 5,
     "Fuel": 100,
     "Battles": 0,
@@ -17,6 +18,7 @@
   },
   "John": {
     "Username": "John",
+    "PlayerColorHex": "#3B82F6",
     "Level": 1,
     "Experience": 0,
     "NextLevelExp": 1000,
@@ -33,6 +35,7 @@
   },
   "Korrpi": {
     "Username": "Korrpi",
+    "PlayerColorHex": "#3B82F6",
     "Level": 1,
     "Experience": 0,
     "NextLevelExp": 1000,
