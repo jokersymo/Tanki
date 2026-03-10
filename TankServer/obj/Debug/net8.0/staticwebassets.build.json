@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "i3EXyFr5GdfC0rJnx9k1lM9qC6AKAEzfs0cmkMDWZ9U=",
+  "Source": "TankServer",
+  "BasePath": "_content/TankServer",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
