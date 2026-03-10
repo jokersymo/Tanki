@@ -5,7 +5,7 @@ namespace TankiLauncher.Models
     public class Profile
     {
         [JsonPropertyName("Username")]
-        public string Username { get; set; }
+        public string Username { get; set; } = string.Empty;
 
         [JsonPropertyName("Level")]
         public int Level { get; set; }
@@ -44,6 +44,6 @@ namespace TankiLauncher.Models
         public double KD { get; set; }
 
         [JsonPropertyName("Rank")]
-        public string Rank { get; set; }
+        public string Rank { get; set; } = string.Empty;
     }
 }

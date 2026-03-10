@@ -1,20 +1,28 @@
-using TankiServer.Services;
+using System.Text.Json;
 using TankiServer.Hubs;
+using TankiServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// контроллеры API
-builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
 
-// 🔴 Регистрируем сервис пользователей
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
+
 builder.Services.AddSingleton<UserService>();
 
 var app = builder.Build();
 
-// маршруты контроллеров
 app.MapControllers();
 app.MapHub<GameHub>("/game");
 
-// запуск сервера
 app.Run("http://localhost:5000");

@@ -24,7 +24,10 @@ namespace TankiLauncher.Views
         {
             try
             {
-                string username = App.CurrentUser;
+                string username = App.CurrentUser ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(username))
+                    return;
 
                 HttpClient client = new HttpClient();
 
@@ -70,7 +73,7 @@ namespace TankiLauncher.Views
 
     public class PlayerProfile
     {
-        public string Username { get; set; }
+        public string Username { get; set; } = string.Empty;
         public int Level { get; set; }
         public int Experience { get; set; }
         public int NextLevelExp { get; set; }
@@ -86,6 +89,6 @@ namespace TankiLauncher.Views
         public int Wins { get; set; }
         public int KD { get; set; }
 
-        public string Rank { get; set; }
+        public string Rank { get; set; } = string.Empty;
     }
 }

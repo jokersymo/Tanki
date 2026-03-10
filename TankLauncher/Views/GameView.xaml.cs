@@ -1,170 +1,85 @@
-using System;
-using System.Windows;
-using System.Collections.Generic;
-using System.Windows.Controls;
-using System.Windows.Shapes;
-using System.Windows.Media;
-using System.Windows.Threading;
-using System.Windows.Input;
 using Microsoft.AspNetCore.SignalR.Client;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace TankiLauncher.Views
 {
     public partial class GameView : UserControl
     {
-        HubConnection connection;
+        private HubConnection? connection;
 
-        Dictionary<string, Ellipse> otherPlayers = new();
-        Dictionary<string, TextBlock> otherPlayerTexts = new();
-        Dictionary<string, PlayerState> serverPlayers = new();
+        private readonly Dictionary<string, VisualPlayer> otherPlayers = new();
+        private readonly Dictionary<string, PlayerState> serverPlayers = new();
+        private readonly Dictionary<string, ResourceVisual> resources = new();
+        private readonly HashSet<Key> keys = new();
+        private readonly Random random = new();
 
-        TextBlock fpsText;
+        private readonly List<TrailPoint> trail = new();
 
-        bool showFPS = false;
+        private TextBlock? fpsText;
+        private bool showFPS;
+        private int frameCount;
+        private DateTime lastFPSUpdate = DateTime.Now;
 
-        int frameCount = 0;
-        DateTime lastFPSUpdate = DateTime.Now;
-        int chunkSize = 600;
-        HashSet<string> generatedChunks = new HashSet<string>();
+        private Ellipse? player;
+        private TextBlock? playerText;
+        private string playerColorHex = "#4DA3FF";
 
-        Ellipse player;
-        TextBlock playerText;
-
-        double playerX = 0;
-        double playerY = 0;
-
-        double speed = 6;
-
-        HashSet<Key> keys = new HashSet<Key>();
-
-        Random random = new Random();
-
-        List<Resource> resources = new List<Resource>();
-        List<TrailPoint> trail = new List<TrailPoint>();
-
-        void UpdatePlayers(Dictionary<string, PlayerState> players)
-        {
-            foreach(var p in players)
-            {
-                if(p.Key == connection.ConnectionId)
-                    continue;
-
-                if(!otherPlayers.ContainsKey(p.Key))
-                {
-                    Ellipse circle = new Ellipse
-                    {
-                        Width = 40,
-                        Height = 40,
-                        Fill = Brushes.Blue
-                    };
-
-                    TextBlock txt = new TextBlock
-                    {
-                        Text = "[P]",
-                        FontWeight = FontWeights.Bold
-                    };
-
-                    GameCanvas.Children.Add(circle);
-                    GameCanvas.Children.Add(txt);
-
-                    otherPlayers[p.Key] = circle;
-                    otherPlayerTexts[p.Key] = txt;
-                }
-
-                double centerX = ActualWidth / 2;
-                double centerY = ActualHeight / 2;
-
-                double x = p.Value.X - playerX + centerX;
-                double y = p.Value.Y - playerY + centerY;
-
-                Canvas.SetLeft(otherPlayers[p.Key], x - 20);
-                Canvas.SetTop(otherPlayers[p.Key], y - 20);
-
-                Canvas.SetLeft(otherPlayerTexts[p.Key], x - 10);
-                Canvas.SetTop(otherPlayerTexts[p.Key], y - 10);
-            }
-        }
+        private double playerX;
+        private double playerY;
+        private readonly double speed = 6;
 
         public GameView()
         {
             InitializeComponent();
             Loaded += GameLoaded;
+            Unloaded += GameUnloaded;
         }
 
-        void UpdateChunks()
+        private void GameLoaded(object sender, RoutedEventArgs e)
         {
-            int playerChunkX = (int)Math.Floor(playerX / chunkSize);
-            int playerChunkY = (int)Math.Floor(playerY / chunkSize);
+            Focusable = true;
+            Focus();
+            Keyboard.Focus(this);
 
-            for (int x = -2; x <= 2; x++)
+            CreatePlayer();
+            PreviewKeyDown += KeyPressed;
+            PreviewKeyUp += KeyReleased;
+            CompositionTarget.Rendering += GameLoop;
+            CreateFPSCounter();
+            ConnectToServer();
+        }
+
+        private async void GameUnloaded(object sender, RoutedEventArgs e)
+        {
+            CompositionTarget.Rendering -= GameLoop;
+            PreviewKeyDown -= KeyPressed;
+            PreviewKeyUp -= KeyReleased;
+
+            if (connection != null)
             {
-                for (int y = -2; y <= 2; y++)
+                try
                 {
-                    GenerateChunk(playerChunkX + x, playerChunkY + y);
+                    await connection.StopAsync();
+                    await connection.DisposeAsync();
                 }
+                catch
+                {
+                }
+
+                connection = null;
             }
         }
-        void GenerateChunk(int cx, int cy)
-        {
-            string key = cx + "_" + cy;
 
-            if (generatedChunks.Contains(key))
-                return;
-
-            generatedChunks.Add(key);
-
-            for (int i = 0; i < 12; i++)
-            {
-                Rectangle rect = new Rectangle
-                {
-                    Width = 10,
-                    Height = 10,
-                    Fill = RandomResourceColor()
-                };
-
-                double x = cx * chunkSize + random.Next(chunkSize);
-                double y = cy * chunkSize + random.Next(chunkSize);
-
-                Resource res = new Resource
-                {
-                    worldX = x,
-                    worldY = y,
-                    rect = rect
-                };
-
-                resources.Add(res);
-                GameCanvas.Children.Add(rect);
-            }
-        }
-        Color Darken(Color c)
-        {
-            return Color.FromRgb(
-                (byte)(c.R * 0.6),
-                (byte)(c.G * 0.6),
-                (byte)(c.B * 0.6));
-        }
-        void StartPulse()
-        {
-            DispatcherTimer pulse = new DispatcherTimer();
-            pulse.Interval = TimeSpan.FromMilliseconds(4);
-
-            double t = 0;
-
-            pulse.Tick += (s, e) =>
-            {
-                t += 0.05;
-
-                double scale = 1 + Math.Sin(t) * 0.07;
-
-                player.Width = 40 * scale;
-                player.Height = 40 * scale;
-
-                playerText.FontSize = 14 * scale;
-            };
-
-            pulse.Start();
-        }
-        void CreateFPSCounter()
+        private void CreateFPSCounter()
         {
             fpsText = new TextBlock
             {
@@ -179,247 +94,262 @@ namespace TankiLauncher.Views
 
             Canvas.SetLeft(fpsText, 10);
             Canvas.SetTop(fpsText, 10);
-
             GameCanvas.Children.Add(fpsText);
         }
-        void GameLoaded(object sender, RoutedEventArgs e)
+
+        private void CreatePlayer()
         {
-            Focusable = true;
-            Focus();
-            Keyboard.Focus(this);
-
-            CreatePlayer();
-
-            PreviewKeyDown += KeyPressed;
-            PreviewKeyUp += KeyReleased;
-
-            CompositionTarget.Rendering += GameLoop;
-            CreateFPSCounter();
-            ConnectToServer();
-        }
-
-        void UpdateOtherPlayers()
-        {
-            double centerX = ActualWidth / 2;
-            double centerY = ActualHeight / 2;
-
-            foreach(var p in serverPlayers)
-            {
-                if(p.Key == connection.ConnectionId)
-                    continue;
-
-                if(!otherPlayers.ContainsKey(p.Key))
-                    continue;
-
-                double worldX = p.Value.X;
-                double worldY = p.Value.Y;
-
-                double screenX = worldX - playerX + centerX;
-                double screenY = worldY - playerY + centerY;
-
-                Canvas.SetLeft(otherPlayers[p.Key], screenX - 20);
-                Canvas.SetTop(otherPlayers[p.Key], screenY - 20);
-
-                Canvas.SetLeft(otherPlayerTexts[p.Key], screenX - 10);
-                Canvas.SetTop(otherPlayerTexts[p.Key], screenY - 10);
-            }
-        }
-
-        void CreatePlayer()
-        {
-            Color baseColor = RandomColor();
+            var baseColor = RandomColor();
+            playerColorHex = $"#{baseColor.R:X2}{baseColor.G:X2}{baseColor.B:X2}";
 
             player = new Ellipse
             {
                 Width = 40,
                 Height = 40,
-                Fill = new RadialGradientBrush
-                {
-                    GradientStops = new GradientStopCollection
-                    {
-                        new GradientStop(Colors.White, 0),
-                        new GradientStop(baseColor, 0.4),
-                        new GradientStop(Darken(baseColor), 1)
-                    }
-                }
+                Fill = CreateGradient(baseColor)
             };
-
             GameCanvas.Children.Add(player);
 
-            string name = App.CurrentUser ?? "P";
-            string letter = name.Substring(0, 1).ToUpper();
+            var name = App.CurrentUser ?? "P";
+            var letter = name.Substring(0, 1).ToUpperInvariant();
 
             playerText = new TextBlock
             {
-                Text = "[" + letter + "]",
+                Text = $"[{letter}]",
                 FontWeight = FontWeights.Bold
             };
-
             GameCanvas.Children.Add(playerText);
-            StartPulse();
         }
 
-        Color RandomColor()
+        private async void ConnectToServer()
         {
-            return Color.FromRgb(
-                (byte)random.Next(100,255),
-                (byte)random.Next(100,255),
-                (byte)random.Next(100,255));
-        }
-        void UpdateFPS()
-        {
-            frameCount++;
+            if (connection != null)
+                return;
 
-            var now = DateTime.Now;
-            var delta = now - lastFPSUpdate;
-
-            if (delta.TotalSeconds >= 1)
-            {
-                fpsText.Text = "FPS: " + frameCount;
-
-                frameCount = 0;
-                lastFPSUpdate = now;
-            }
-        }
-        void SpawnResources()
-        {
-            for(int i = 0; i < 80; i++)
-            {
-                Rectangle rect = new Rectangle
+            connection = new HubConnectionBuilder()
+                .WithUrl("http://localhost:5000/game")
+                .WithAutomaticReconnect()
+                .AddJsonProtocol(options =>
                 {
-                    Width = 10,
-                    Height = 10,
-                    Fill = RandomResourceColor()
-                };
+                    options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
+                    options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                })
+                .Build();
 
-                Resource res = new Resource
-                {
-                    worldX = random.Next(-2000,2000),
-                    worldY = random.Next(-2000,2000),
-                    rect = rect
-                };
-
-                resources.Add(res);
-                GameCanvas.Children.Add(rect);
-            }
-        }
-
-        Brush RandomResourceColor()
-        {
-            int type = random.Next(6);
-
-            return type switch
+            connection.On<Dictionary<string, PlayerState>>("PlayersUpdate", players =>
             {
-                0 => Brushes.Gray,
-                1 => Brushes.White,
-                2 => Brushes.Orange,
-                3 => Brushes.IndianRed,
-                4 => Brushes.DarkGray,
-                _ => Brushes.Red
+                Dispatcher.Invoke(() =>
+                {
+                    serverPlayers.Clear();
+                    foreach (var p in players)
+                    {
+                        serverPlayers[p.Key] = p.Value;
+                    }
+
+                    if (connection != null && serverPlayers.TryGetValue(connection.ConnectionId ?? string.Empty, out var me))
+                    {
+                        playerX = me.X;
+                        playerY = me.Y;
+
+                        if (!string.IsNullOrWhiteSpace(me.ColorHex) && player != null)
+                        {
+                            var ownColor = ParseColor(me.ColorHex);
+                            playerColorHex = me.ColorHex;
+                            player.Fill = CreateGradient(ownColor);
+                        }
+
+                        if (playerText != null)
+                        {
+                            playerText.Text = $"[{me.Letter}]";
+                        }
+                    }
+
+                    SyncOtherPlayers();
+                });
+            });
+
+            connection.On<List<ResourceState>>("ResourcesUpdate", serverResources =>
+            {
+                Dispatcher.Invoke(() => SyncResources(serverResources));
+            });
+
+            connection.On<string>("ForceDisconnect", async _ =>
+            {
+                if (connection != null)
+                {
+                    await connection.StopAsync();
+                }
+            });
+
+            connection.Reconnected += async _ =>
+            {
+                if (connection != null)
+                {
+                    await connection.SendAsync("JoinGame", App.CurrentUser ?? "P", playerColorHex);
+                }
             };
+
+            await connection.StartAsync();
+            await connection.SendAsync("JoinGame", App.CurrentUser ?? "P", playerColorHex);
         }
 
-        void KeyPressed(object sender, KeyEventArgs e)
+        private void SyncOtherPlayers()
         {
-            keys.Add(e.Key);
-            if (e.Key == Key.P)
-            {
-                showFPS = !showFPS;
+            if (connection == null)
+                return;
 
-                fpsText.Visibility = showFPS
-                    ? Visibility.Visible
-                    : Visibility.Hidden;
+            var stale = otherPlayers.Keys.Where(id => !serverPlayers.ContainsKey(id) || id == connection.ConnectionId).ToList();
+            foreach (var id in stale)
+            {
+                GameCanvas.Children.Remove(otherPlayers[id].Circle);
+                GameCanvas.Children.Remove(otherPlayers[id].Text);
+                otherPlayers.Remove(id);
+            }
+
+            foreach (var pair in serverPlayers)
+            {
+                if (pair.Key == connection.ConnectionId)
+                    continue;
+
+                if (!otherPlayers.TryGetValue(pair.Key, out var visual))
+                {
+                    visual = new VisualPlayer();
+                    GameCanvas.Children.Add(visual.Circle);
+                    GameCanvas.Children.Add(visual.Text);
+                    otherPlayers[pair.Key] = visual;
+                }
+
+                var state = pair.Value;
+                visual.Circle.Fill = CreateGradient(ParseColor(state.ColorHex));
+                visual.Text.Text = $"[{state.Letter}]";
             }
         }
 
-        void KeyReleased(object sender, KeyEventArgs e)
+        private void SyncResources(List<ResourceState> serverResources)
         {
-            keys.Remove(e.Key);
+            var ids = serverResources.Select(r => r.Id).ToHashSet();
+            var stale = resources.Keys.Where(id => !ids.Contains(id)).ToList();
+
+            foreach (var id in stale)
+            {
+                GameCanvas.Children.Remove(resources[id].Rect);
+                resources.Remove(id);
+            }
+
+            foreach (var res in serverResources)
+            {
+                if (!resources.TryGetValue(res.Id, out var visual))
+                {
+                    visual = new ResourceVisual
+                    {
+                        Rect = new Rectangle
+                        {
+                            Width = 10,
+                            Height = 10
+                        }
+                    };
+
+                    resources[res.Id] = visual;
+                    GameCanvas.Children.Add(visual.Rect);
+                }
+
+                visual.State = res;
+                visual.Rect.Fill = BrushForType(res.Type);
+            }
         }
 
-        void GameLoop(object? sender, EventArgs e)
+        private void GameLoop(object? sender, EventArgs e)
         {
-            bool moving = false;
+            if (player == null || playerText == null)
+                return;
 
+            var moving = false;
             if (keys.Contains(Key.W)) { playerY -= speed; moving = true; }
             if (keys.Contains(Key.S)) { playerY += speed; moving = true; }
             if (keys.Contains(Key.A)) { playerX -= speed; moving = true; }
             if (keys.Contains(Key.D)) { playerX += speed; moving = true; }
 
-            if (moving)
-            {
-                if (random.Next(3) == 0)
-                {
-                    CreateTrail();
-                }
-            }
+            if (moving && random.Next(3) == 0)
+                CreateTrail();
+
+            var pulseScale = 1 + Math.Sin(DateTime.Now.TimeOfDay.TotalSeconds * 7) * 0.07;
+            player.Width = 40 * pulseScale;
+            player.Height = 40 * pulseScale;
+            playerText.FontSize = 14 * pulseScale;
+
             UpdateTrail();
-            UpdateChunks();
             UpdatePlayerPosition();
             UpdateResources();
-            CheckResources();
-            UpdateFPS();
             UpdateOtherPlayers();
-            if(connection != null)
+            UpdateFPS();
+
+            if (connection != null)
             {
-                connection.SendAsync("Move", playerX, playerY);
+                _ = connection.SendAsync("Move", playerX, playerY, pulseScale);
             }
         }
 
-        void UpdatePlayerPosition()
+        private void UpdateResources()
         {
-            double centerX = ActualWidth / 2;
-            double centerY = ActualHeight / 2;
+            var centerX = ActualWidth / 2;
+            var centerY = ActualHeight / 2;
 
-            double size = player.Width;
+            foreach (var res in resources.Values)
+            {
+                var screenX = res.State.X - playerX + centerX;
+                var screenY = res.State.Y - playerY + centerY;
+                Canvas.SetLeft(res.Rect, screenX);
+                Canvas.SetTop(res.Rect, screenY);
+            }
+        }
 
-            Canvas.SetLeft(player, centerX - size / 2);
-            Canvas.SetTop(player, centerY - size / 2);
+        private void UpdateOtherPlayers()
+        {
+            var centerX = ActualWidth / 2;
+            var centerY = ActualHeight / 2;
+
+            foreach (var pair in serverPlayers)
+            {
+                if (connection == null || pair.Key == connection.ConnectionId)
+                    continue;
+                if (!otherPlayers.TryGetValue(pair.Key, out var visual))
+                    continue;
+
+                var s = pair.Value;
+                var size = 40 * s.PulseScale;
+                visual.Circle.Width = size;
+                visual.Circle.Height = size;
+                visual.Text.FontSize = 14 * s.PulseScale;
+
+                var screenX = s.X - playerX + centerX;
+                var screenY = s.Y - playerY + centerY;
+
+                Canvas.SetLeft(visual.Circle, screenX - size / 2);
+                Canvas.SetTop(visual.Circle, screenY - size / 2);
+                Canvas.SetLeft(visual.Text, screenX - 10);
+                Canvas.SetTop(visual.Text, screenY - 10);
+            }
+        }
+
+        private void UpdatePlayerPosition()
+        {
+            if (player == null || playerText == null)
+                return;
+
+            var centerX = ActualWidth / 2;
+            var centerY = ActualHeight / 2;
+
+            Canvas.SetLeft(player, centerX - player.Width / 2);
+            Canvas.SetTop(player, centerY - player.Height / 2);
 
             playerText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-
-            double textW = playerText.DesiredSize.Width;
-            double textH = playerText.DesiredSize.Height;
-
-            Canvas.SetLeft(playerText, centerX - textW / 2);
-            Canvas.SetTop(playerText, centerY - textH / 2);
+            Canvas.SetLeft(playerText, centerX - playerText.DesiredSize.Width / 2);
+            Canvas.SetTop(playerText, centerY - playerText.DesiredSize.Height / 2);
         }
 
-        void UpdateResources()
+        private void CreateTrail()
         {
-            double centerX = ActualWidth / 2;
-            double centerY = ActualHeight / 2;
-
-            foreach(var res in resources)
-            {
-                double screenX = res.worldX - playerX + centerX;
-                double screenY = res.worldY - playerY + centerY;
-
-                Canvas.SetLeft(res.rect, screenX);
-                Canvas.SetTop(res.rect, screenY);
-            }
-        }
-
-        void CheckResources()
-        {
-            foreach(var res in resources.ToArray())
-            {
-                double dx = res.worldX - playerX;
-                double dy = res.worldY - playerY;
-
-                if(Math.Abs(dx) < 25 && Math.Abs(dy) < 25)
-                {
-                    GameCanvas.Children.Remove(res.rect);
-                    resources.Remove(res);
-
-                    Console.WriteLine("Ресурс собран +10 XP");
-                }
-            }
-        }
-
-        void CreateTrail()
-        {
-            Ellipse dot = new Ellipse
+            var dot = new Ellipse
             {
                 Width = 6,
                 Height = 6,
@@ -427,116 +357,157 @@ namespace TankiLauncher.Views
                 Opacity = 0.4
             };
 
-            TrailPoint t = new TrailPoint
-            {
-                worldX = playerX,
-                worldY = playerY,
-                circle = dot
-            };
-
+            trail.Add(new TrailPoint { WorldX = playerX, WorldY = playerY, Circle = dot });
             GameCanvas.Children.Add(dot);
-            trail.Add(t);
         }
 
-        void UpdateTrail()
+        private void UpdateTrail()
         {
-            double centerX = ActualWidth / 2;
-            double centerY = ActualHeight / 2;
+            var centerX = ActualWidth / 2;
+            var centerY = ActualHeight / 2;
 
             foreach (var t in trail.ToArray())
             {
-                t.life -= 0.016;
+                t.Life -= 0.016;
+                var screenX = t.WorldX - playerX + centerX;
+                var screenY = t.WorldY - playerY + centerY;
+                Canvas.SetLeft(t.Circle, screenX);
+                Canvas.SetTop(t.Circle, screenY);
+                t.Circle.Opacity = t.Life / 3.0;
 
-                double screenX = t.worldX - playerX + centerX;
-                double screenY = t.worldY - playerY + centerY;
-
-                Canvas.SetLeft(t.circle, screenX);
-                Canvas.SetTop(t.circle, screenY);
-
-                t.circle.Opacity = t.life / 3.0;
-
-                if (t.life <= 0)
+                if (t.Life <= 0)
                 {
-                    GameCanvas.Children.Remove(t.circle);
+                    GameCanvas.Children.Remove(t.Circle);
                     trail.Remove(t);
                 }
             }
         }
-        void CreatePlayersIfNeeded(Dictionary<string, PlayerState> players)
+
+        private void KeyPressed(object sender, KeyEventArgs e)
         {
-            foreach(var p in players)
+            keys.Add(e.Key);
+            if (e.Key == Key.P && fpsText != null)
             {
-                if(p.Key == connection.ConnectionId)
-                    continue;
-
-                if(!otherPlayers.ContainsKey(p.Key))
-                {
-                    Ellipse circle = new Ellipse
-                    {
-                        Width = 40,
-                        Height = 40,
-                        Fill = Brushes.Blue
-                    };
-
-                    TextBlock txt = new TextBlock
-                    {
-                        Text = "[P]",
-                        FontWeight = FontWeights.Bold
-                    };
-
-                    GameCanvas.Children.Add(circle);
-                    GameCanvas.Children.Add(txt);
-
-                    otherPlayers[p.Key] = circle;
-                    otherPlayerTexts[p.Key] = txt;
-                }
+                showFPS = !showFPS;
+                fpsText.Visibility = showFPS ? Visibility.Visible : Visibility.Hidden;
             }
         }
-        async void ConnectToServer()
+
+        private void KeyReleased(object sender, KeyEventArgs e) => keys.Remove(e.Key);
+
+        private void UpdateFPS()
         {
-            connection = new HubConnectionBuilder()
-                .WithUrl("http://localhost:5000/game")
-                .WithAutomaticReconnect()
-                .Build();
+            if (fpsText == null)
+                return;
 
-            connection.On<Dictionary<string, PlayerState>>("PlayersUpdate", (players) =>
+            frameCount++;
+            var now = DateTime.Now;
+            var delta = now - lastFPSUpdate;
+            if (delta.TotalSeconds >= 1)
             {
-                Dispatcher.Invoke(() =>
-                {
-                    foreach (var p in players)
-                    {
-                        if (p.Key == connection.ConnectionId)
-                            continue; // ← игнорируем себя
-
-                        serverPlayers[p.Key] = p.Value;
-                    }
-
-                    CreatePlayersIfNeeded(serverPlayers);
-                });
-            });
-
-            await connection.StartAsync();
-
-            Console.WriteLine("Connected to server");
+                fpsText.Text = "FPS: " + frameCount;
+                frameCount = 0;
+                lastFPSUpdate = now;
+            }
         }
-    class Resource
-    {
-        public double worldX;
-        public double worldY;
-        public Rectangle rect;
+
+        private static RadialGradientBrush CreateGradient(Color baseColor)
+        {
+            return new RadialGradientBrush
+            {
+                GradientStops = new GradientStopCollection
+                {
+                    new GradientStop(Colors.White, 0),
+                    new GradientStop(baseColor, 0.4),
+                    new GradientStop(Darken(baseColor), 1)
+                }
+            };
+        }
+
+        private static Color Darken(Color c) => Color.FromRgb((byte)(c.R * 0.6), (byte)(c.G * 0.6), (byte)(c.B * 0.6));
+
+        private Color RandomColor() => Color.FromRgb((byte)random.Next(100, 255), (byte)random.Next(100, 255), (byte)random.Next(100, 255));
+
+        private static Color ParseColor(string hex)
+        {
+            try
+            {
+                var parsed = ColorConverter.ConvertFromString(hex);
+                return parsed is Color c ? c : Colors.Blue;
+            }
+            catch
+            {
+                return Colors.Blue;
+            }
+        }
+
+        private static Brush BrushForType(string type) => type switch
+        {
+            "iron" => Brushes.Gray,
+            "silver" => Brushes.White,
+            "gold" => Brushes.Orange,
+            "copper" => Brushes.IndianRed,
+            "titanium" => Brushes.DarkGray,
+            _ => Brushes.Red
+        };
+
+        private sealed class VisualPlayer
+        {
+            public Ellipse Circle { get; } = new() { Width = 40, Height = 40, Fill = Brushes.Blue };
+            public TextBlock Text { get; } = new() { Text = "[P]", FontWeight = FontWeights.Bold };
+        }
+
+        private sealed class ResourceVisual
+        {
+            public required Rectangle Rect { get; init; }
+            public ResourceState State { get; set; } = new();
+        }
+
+        private sealed class TrailPoint
+        {
+            public double WorldX;
+            public double WorldY;
+            public double Life = 3.0;
+            public required Ellipse Circle;
+        }
+
+        public sealed class PlayerState
+        {
+            [JsonPropertyName("id")]
+            public string Id { get; set; } = string.Empty;
+
+            [JsonPropertyName("username")]
+            public string Username { get; set; } = "P";
+
+            [JsonPropertyName("letter")]
+            public string Letter { get; set; } = "P";
+
+            [JsonPropertyName("colorHex")]
+            public string ColorHex { get; set; } = "#3B82F6";
+
+            [JsonPropertyName("pulseScale")]
+            public double PulseScale { get; set; } = 1;
+
+            [JsonPropertyName("x")]
+            public double X { get; set; }
+
+            [JsonPropertyName("y")]
+            public double Y { get; set; }
+        }
+
+        public sealed class ResourceState
+        {
+            [JsonPropertyName("id")]
+            public string Id { get; set; } = string.Empty;
+
+            [JsonPropertyName("x")]
+            public double X { get; set; }
+
+            [JsonPropertyName("y")]
+            public double Y { get; set; }
+
+            [JsonPropertyName("type")]
+            public string Type { get; set; } = string.Empty;
+        }
     }
-    class TrailPoint
-    {
-        public double worldX;
-        public double worldY;
-        public double life = 3.0; // секунды
-        public Ellipse circle;
-    }
-    public class PlayerState
-    {
-        public string Id { get; set; }
-        public double X { get; set; }
-        public double Y { get; set; }
-    }
-}
 }

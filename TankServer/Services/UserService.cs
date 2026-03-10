@@ -5,14 +5,11 @@ namespace TankiServer.Services
 {
     public class UserService
     {
-        private static Dictionary<string, string> users = new();
+        private static readonly Dictionary<string, string> users = new();
         private static Dictionary<string, PlayerProfile> profiles = new();
+        private static readonly object sync = new();
 
-        private static string dbPath = "Data/players.json";
-
-        // =============================
-        // ЗАГРУЗКА БАЗЫ
-        // =============================
+        private static readonly string dbPath = "Data/players.json";
 
         static UserService()
         {
@@ -26,16 +23,13 @@ namespace TankiServer.Services
             if (!File.Exists(dbPath))
             {
                 Console.WriteLine("[DB] players.json not found, creating new database");
-
                 Directory.CreateDirectory("Data");
                 File.WriteAllText(dbPath, "{}");
             }
 
             var json = File.ReadAllText(dbPath);
-
-            profiles = JsonSerializer.Deserialize
-            <Dictionary<string, PlayerProfile>>(json)
-            ?? new Dictionary<string, PlayerProfile>();
+            profiles = JsonSerializer.Deserialize<Dictionary<string, PlayerProfile>>(json)
+                ?? new Dictionary<string, PlayerProfile>();
 
             foreach (var p in profiles)
             {
@@ -43,106 +37,150 @@ namespace TankiServer.Services
             }
 
             Console.WriteLine($"[DB] Loaded players: {profiles.Count}");
-
-            foreach (var p in profiles)
-            {
-                Console.WriteLine($"[DB] Player: {p.Key}");
-            }
         }
-
-        // =============================
-        // СОХРАНЕНИЕ
-        // =============================
 
         public static void SaveDatabase()
         {
-            Console.WriteLine("[DB] Saving database...");
-
-            var json = JsonSerializer.Serialize(
-                profiles,
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-
+            var json = JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(dbPath, json);
-
             Console.WriteLine("[DB] Saved players");
         }
 
-        // =============================
-        // РЕГИСТРАЦИЯ
-        // =============================
-
         public bool Register(string username, string password)
         {
-            Console.WriteLine($"[REGISTER] Attempt: {username}");
-
-            if (profiles.ContainsKey(username))
+            lock (sync)
             {
-                Console.WriteLine("[REGISTER] User already exists");
-                return false;
+                if (profiles.ContainsKey(username))
+                    return false;
+
+                users[username] = password;
+                profiles[username] = new PlayerProfile
+                {
+                    Username = username,
+                    PlayerColorHex = GenerateStableColor(username)
+                };
+
+                SaveDatabase();
+                return true;
             }
-
-            users[username] = password;
-
-            profiles[username] = new PlayerProfile
-            {
-                Username = username
-            };
-
-            SaveDatabase();
-
-            Console.WriteLine($"[REGISTER] Success: {username}");
-
-            return true;
         }
-
-        // =============================
-        // ЛОГИН
-        // =============================
 
         public bool Login(string username, string password)
         {
-            Console.WriteLine($"[LOGIN] Attempt: {username}");
-
-            if (!users.ContainsKey(username))
-            {
-                Console.WriteLine("[LOGIN] User not found");
-                return false;
-            }
-
-            Console.WriteLine($"[LOGIN] Success: {username}");
-
-            return true;
+            return users.ContainsKey(username);
         }
-
-        // =============================
-        // ПОЛУЧЕНИЕ ПРОФИЛЯ
-        // =============================
 
         public PlayerProfile? GetProfile(string username)
         {
-            Console.WriteLine($"[PROFILE REQUEST] {username}");
-
-            if (profiles.ContainsKey(username))
+            lock (sync)
             {
-                Console.WriteLine("[PROFILE] Found player");
+                if (profiles.TryGetValue(username, out var profile))
+                    return profile;
 
-                var p = profiles[username];
-
-                Console.WriteLine($"Silver: {p.Silver}");
-                Console.WriteLine($"Gold: {p.Gold}");
-                Console.WriteLine($"Iron: {p.Iron}");
-                Console.WriteLine($"Copper: {p.Copper}");
-                Console.WriteLine($"Titanium: {p.Titanium}");
-
-                return p;
+                return null;
             }
+        }
 
-            Console.WriteLine("[PROFILE] Player not found");
+        public PlayerProfile GetOrCreateProfile(string username)
+        {
+            lock (sync)
+            {
+                if (!profiles.TryGetValue(username, out var profile))
+                {
+                    profile = new PlayerProfile
+                    {
+                        Username = username,
+                        PlayerColorHex = GenerateStableColor(username)
+                    };
 
-            return null;
+                    profiles[username] = profile;
+                    SaveDatabase();
+                }
+
+                if (string.IsNullOrWhiteSpace(profile.PlayerColorHex))
+                {
+                    profile.PlayerColorHex = GenerateStableColor(username);
+                    SaveDatabase();
+                }
+
+                return profile;
+            }
+        }
+
+        public string EnsurePlayerColor(string username, string requestedColorHex)
+        {
+            lock (sync)
+            {
+                var profile = GetOrCreateProfile(username);
+
+                if (profile.PlayerColorHex.StartsWith("#") && profile.PlayerColorHex.Length == 7)
+                    return profile.PlayerColorHex;
+
+                profile.PlayerColorHex = IsValidColor(requestedColorHex)
+                    ? requestedColorHex
+                    : GenerateStableColor(username);
+
+                SaveDatabase();
+                return profile.PlayerColorHex;
+            }
+        }
+
+        public void ApplyResourcePickup(string username, string resourceType)
+        {
+            lock (sync)
+            {
+                var profile = GetOrCreateProfile(username);
+
+                switch (resourceType)
+                {
+                    case "iron":
+                        profile.Iron += 1;
+                        break;
+                    case "silver":
+                        profile.Silver += 5;
+                        break;
+                    case "gold":
+                        profile.Gold += 1;
+                        break;
+                    case "copper":
+                        profile.Copper += 1;
+                        break;
+                    case "titanium":
+                        profile.Titanium += 1;
+                        break;
+                    default:
+                        profile.Fuel += 2;
+                        break;
+                }
+
+                profile.Experience += 10;
+
+                while (profile.Experience >= profile.NextLevelExp)
+                {
+                    profile.Experience -= profile.NextLevelExp;
+                    profile.Level += 1;
+                    profile.NextLevelExp = (int)(profile.NextLevelExp * 1.2);
+                }
+
+                SaveDatabase();
+            }
+        }
+
+        private static bool IsValidColor(string colorHex)
+        {
+            if (string.IsNullOrWhiteSpace(colorHex) || colorHex.Length != 7 || colorHex[0] != '#')
+                return false;
+
+            return colorHex.Skip(1).All(Uri.IsHexDigit);
+        }
+
+        private static string GenerateStableColor(string username)
+        {
+            var hash = Math.Abs(username.GetHashCode());
+            var r = 100 + (hash % 156);
+            var g = 100 + ((hash / 97) % 156);
+            var b = 100 + ((hash / 193) % 156);
+            return $"#{r:X2}{g:X2}{b:X2}";
         }
     }
 }

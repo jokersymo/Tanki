@@ -2,7 +2,8 @@ namespace TankiServer.Models
 {
     public class PlayerProfile
     {
-        public string Username { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string PlayerColorHex { get; set; } = "#3B82F6";
 
         public int Level { get; set; } = 1;
         public int Experience { get; set; } = 0;

@@ -5,7 +5,7 @@ namespace TankiLauncher
 {
     public partial class App : Application
     {
-        public static string CurrentUser;
+        public static string? CurrentUser;
 
         protected override void OnStartup(StartupEventArgs e)
         {
