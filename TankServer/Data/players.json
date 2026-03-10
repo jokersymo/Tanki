@@ -1,0 +1,50 @@
+{
+  "Joker": {
+    "Username": "Joker",
+    "Level": 1,
+    "Experience": 0,
+    "NextLevelExp": 1000,
+    "Silver": 500,
+    "Gold": 10,
+    "Iron": 50,
+    "Copper": 40,
+    "Titanium": 5,
+    "Fuel": 100,
+    "Battles": 0,
+    "Wins": 0,
+    "KD": 1,
+    "Rank": "\u041D\u043E\u0432\u043E\u0431\u0440\u0430\u043D\u0435\u0446"
+  },
+  "John": {
+    "Username": "John",
+    "Level": 1,
+    "Experience": 0,
+    "NextLevelExp": 1000,
+    "Silver": 500,
+    "Gold": 10,
+    "Iron": 50,
+    "Copper": 40,
+    "Titanium": 5,
+    "Fuel": 100,
+    "Battles": 0,
+    "Wins": 0,
+    "KD": 1,
+    "Rank": "\u041D\u043E\u0432\u043E\u0431\u0440\u0430\u043D\u0435\u0446"
+  },
+  "Korrpi": {
+    "Username": "Korrpi",
+    "Level": 1,
+    "Experience": 0,
+    "NextLevelExp": 1000,
+    "Silver": 500,
+    "Gold": 10,
+    "Iron": 50,
+    "Copper": 40,
+    "Titanium": 5,
+    "Fuel": 100,
+    "Battles": 0,
+    "Wins": 0,
+    "KD": 1,
+    "Rank": "\u041D\u043E\u0432\u043E\u0431\u0440\u0430\u043D\u0435\u0446"
+  }
+}

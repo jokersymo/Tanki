@@ -1,0 +1,62 @@
+<Window x:Class="TankiLauncher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tanki Launcher"
+        Height="600"
+        Width="900"
+        Background="#121212">
+
+<Grid>
+
+<Grid.ColumnDefinitions>
+<ColumnDefinition Width="200"/>
+<ColumnDefinition Width="*"/>
+</Grid.ColumnDefinitions>
+
+<!-- MENU -->
+
+<StackPanel Background="#1E1E1E">
+
+<TextBlock Text="TANKI"
+Foreground="White"
+FontSize="30"
+Margin="20"/>
+
+    <Button x:Name="PlayBtn"
+    Content="Играть"
+    Style="{StaticResource ModernButton}"
+    Visibility="Collapsed"
+    Click="Play_Click"/>
+
+    <Button x:Name="LoginBtn"
+    Content="Вход"
+    Style="{StaticResource ModernButton}"
+    Click="Login_Click"/>
+
+    <Button x:Name="RegisterBtn"
+    Content="Регистрация"
+    Style="{StaticResource ModernButton}"
+    Click="Register_Click"/>
+
+    <Button x:Name="ProfileBtn"
+    Content="Профиль"
+    Style="{StaticResource ModernButton}"
+    Visibility="Collapsed"/>
+
+    <Button Content="Настройки"
+    Style="{StaticResource ModernButton}"
+    Click="Settings_Click"/>
+
+    <Button Content="Выход"
+    Style="{StaticResource ModernButton}"
+    Click="Exit_Click"/>
+
+</StackPanel>
+
+<!-- CONTENT -->
+
+<Grid x:Name="ContentArea" Grid.Column="1"/>
+
+</Grid>
+
+</Window>
