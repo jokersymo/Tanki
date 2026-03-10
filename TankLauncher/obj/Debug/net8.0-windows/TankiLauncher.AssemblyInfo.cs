@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TankiLauncher")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9f4bcccb561ae6634eed9aa3230735c223aa10ce")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cfdcbb2a6bd503f2021e5a2d5792db53ab388e66")]
 [assembly: System.Reflection.AssemblyProductAttribute("TankiLauncher")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TankiLauncher")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
